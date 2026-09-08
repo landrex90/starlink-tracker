@@ -4,7 +4,6 @@ export type TerminalTelemetry = {
   serviceLineNumber: string | null;
   nickname: string | null;
   kitSerialNumber: string | null;
-  formattedAddress: string | null;
   latitude: number | null;
   longitude: number | null;
   online: boolean;

@@ -1,3 +1,4 @@
+import { cellToLatLng } from "h3-js";
 import type {
   ListTerminalsResult,
   StarlinkAccount,
@@ -151,14 +152,24 @@ type UserTerminalsPage = {
   isLastPage?: boolean;
 };
 
+type TelemetryReading = {
+  timestamp: string;
+  signalQuality: number;
+  // Real-time GPS cell reported by the dish itself — this is the true
+  // physical location of the antenna. The Starlink "address" concept
+  // (service-lines/addresses endpoints) is a billing/compliance address that
+  // installers commonly reuse across every line on an account, so it does
+  // NOT reliably represent where an individual dish is actually installed.
+  h3CellId?: string | null;
+};
+
 type TelemetryQueryContent = {
-  userTerminals?: Record<string, { timestamp: string; signalQuality: number }>;
+  userTerminals?: Record<string, TelemetryReading>;
 };
 
 type RawServiceLine = {
   serviceLineNumber: string;
   nickname?: string | null;
-  addressReferenceId?: string | null;
 };
 
 type ServiceLinesPage = {
@@ -166,16 +177,13 @@ type ServiceLinesPage = {
   isLastPage?: boolean;
 };
 
-type ServiceLineInfo = { nickname: string | null; addressReferenceId: string | null };
-
 // The human-readable name installers set in the Starlink portal usually lives
 // on the service line, not the physical terminal (whose nickname is almost
-// always null in practice). The service line is also the only place linking
-// a terminal to its installed address.
-async function listServiceLineInfo(
+// always null in practice).
+async function listServiceLineNicknames(
   account: StarlinkAccount,
-): Promise<Record<string, ServiceLineInfo>> {
-  const info: Record<string, ServiceLineInfo> = {};
+): Promise<Record<string, string>> {
+  const nicknames: Record<string, string> = {};
 
   let page = 0;
   while (true) {
@@ -185,56 +193,24 @@ async function listServiceLineInfo(
     const rawItems = response.content?.results ?? [];
     const items = Array.isArray(rawItems) ? rawItems : [];
     for (const line of items) {
-      info[line.serviceLineNumber] = {
-        nickname: line.nickname ?? null,
-        addressReferenceId: line.addressReferenceId ?? null,
-      };
+      if (line.nickname) nicknames[line.serviceLineNumber] = line.nickname;
     }
     const isLastPage = response.content?.isLastPage ?? true;
     if (isLastPage || items.length === 0) break;
     page += 1;
   }
 
-  return info;
+  return nicknames;
 }
 
-type RawAddress = {
-  addressReferenceId: string;
-  formattedAddress?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-};
-
-type AddressesPage = {
-  results?: RawAddress[];
-  isLastPage?: boolean;
-};
-
-type AddressInfo = { formattedAddress: string | null; latitude: number | null; longitude: number | null };
-
-async function listAddresses(account: StarlinkAccount): Promise<Record<string, AddressInfo>> {
-  const addresses: Record<string, AddressInfo> = {};
-
-  let page = 0;
-  while (true) {
-    const response = (await apiGet(account, "/addresses", {
-      page: String(page),
-    })) as ServiceResponse<AddressesPage>;
-    const rawItems = response.content?.results ?? [];
-    const items = Array.isArray(rawItems) ? rawItems : [];
-    for (const address of items) {
-      addresses[address.addressReferenceId] = {
-        formattedAddress: address.formattedAddress ?? null,
-        latitude: address.latitude ?? null,
-        longitude: address.longitude ?? null,
-      };
-    }
-    const isLastPage = response.content?.isLastPage ?? true;
-    if (isLastPage || items.length === 0) break;
-    page += 1;
+function h3ToLatLng(h3CellId: string | null | undefined): { latitude: number; longitude: number } | null {
+  if (!h3CellId) return null;
+  try {
+    const [latitude, longitude] = cellToLatLng(h3CellId);
+    return { latitude, longitude };
+  } catch {
+    return null;
   }
-
-  return addresses;
 }
 
 async function listUserTerminals(account: StarlinkAccount): Promise<
@@ -281,9 +257,7 @@ async function listUserTerminals(account: StarlinkAccount): Promise<
   return results;
 }
 
-async function queryTelemetry(
-  account: StarlinkAccount,
-): Promise<Record<string, { timestamp: string; signalQuality: number }>> {
+async function queryTelemetry(account: StarlinkAccount): Promise<Record<string, TelemetryReading>> {
   const response = (await apiPost(account, "/telemetry/query", {
     includeUserTerminals: true,
   })) as ServiceResponse<TelemetryQueryContent>;
@@ -299,28 +273,28 @@ async function queryTelemetry(
 async function listTerminalsForAccount(
   account: StarlinkAccount,
 ): Promise<TerminalTelemetry[]> {
-  const [terminals, telemetry, serviceLines, addresses] = await Promise.all([
+  const [terminals, telemetry, serviceLineNicknames] = await Promise.all([
     listUserTerminals(account),
     queryTelemetry(account),
-    listServiceLineInfo(account),
-    listAddresses(account),
+    listServiceLineNicknames(account),
   ]);
 
   return terminals.map((terminal) => {
     const reading = telemetry[terminal.userTerminalId];
-    const serviceLine = terminal.serviceLineNumber ? serviceLines[terminal.serviceLineNumber] : undefined;
-    const address = serviceLine?.addressReferenceId ? addresses[serviceLine.addressReferenceId] : undefined;
+    const serviceLineNickname = terminal.serviceLineNumber
+      ? serviceLineNicknames[terminal.serviceLineNumber]
+      : undefined;
+    const coords = h3ToLatLng(reading?.h3CellId);
     return {
       terminalId: terminal.userTerminalId,
       accountLabel: account.label,
       serviceLineNumber: terminal.serviceLineNumber,
       // service line nickname (set per-site in the Starlink portal) takes
       // priority — the terminal's own nickname is almost always empty.
-      nickname: serviceLine?.nickname ?? terminal.nickname,
+      nickname: serviceLineNickname ?? terminal.nickname,
       kitSerialNumber: terminal.kitSerialNumber,
-      formattedAddress: address?.formattedAddress ?? null,
-      latitude: address?.latitude ?? null,
-      longitude: address?.longitude ?? null,
+      latitude: coords?.latitude ?? null,
+      longitude: coords?.longitude ?? null,
       online: Boolean(reading),
       lastSeenAt: reading?.timestamp ?? null,
       signalQuality: reading?.signalQuality ?? null,

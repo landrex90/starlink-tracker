@@ -42,7 +42,6 @@ export async function POST(request: Request) {
       accountLabel: terminal.accountLabel,
       terminalId: terminal.terminalId,
       kitSerialNumber: terminal.kitSerialNumber,
-      location: terminal.formattedAddress,
       latitude: terminal.latitude !== null ? String(terminal.latitude) : null,
       longitude: terminal.longitude !== null ? String(terminal.longitude) : null,
       status: terminal.online ? "online" : "offline",

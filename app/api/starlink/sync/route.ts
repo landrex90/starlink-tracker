@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
   for (const terminal of terminals) {
     const [existing] = await db
-      .select({ id: antennas.id, siteName: antennas.siteName, location: antennas.location })
+      .select({ id: antennas.id, siteName: antennas.siteName })
       .from(antennas)
       .where(eq(antennas.terminalId, terminal.terminalId));
 
@@ -77,12 +77,6 @@ export async function POST(request: Request) {
       existing.siteName === terminal.terminalId
     ) {
       updates.siteName = terminal.nickname;
-    }
-
-    // location is free text a user can type manually — only backfill it
-    // when empty, never overwrite something they've written.
-    if (!existing.location && terminal.formattedAddress) {
-      updates.location = terminal.formattedAddress;
     }
 
     await db.update(antennas).set(updates).where(eq(antennas.id, existing.id));

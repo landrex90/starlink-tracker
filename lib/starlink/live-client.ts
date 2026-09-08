@@ -162,7 +162,14 @@ async function listUserTerminals(
     const data = (await apiGet(account, "/user-terminals", {
       page: String(page),
     })) as UserTerminalsPage;
-    const items = data.content ?? data.results ?? [];
+    const rawItems = data.content ?? data.results ?? [];
+    const items = Array.isArray(rawItems) ? rawItems : [];
+    if (!Array.isArray(rawItems)) {
+      console.error(
+        `[starlink] respuesta inesperada de /user-terminals para ${account.label}:`,
+        JSON.stringify(data),
+      );
+    }
     for (const t of items) {
       results.push({
         userTerminalId: t.userTerminalId,
@@ -184,6 +191,12 @@ async function queryTelemetry(
   const data = (await apiPost(account, "/telemetry/query", {
     includeUserTerminals: true,
   })) as TelemetryQueryResponse;
+  if (!data.userTerminals) {
+    console.error(
+      `[starlink] respuesta inesperada de /telemetry/query para ${account.label}:`,
+      JSON.stringify(data),
+    );
+  }
   return data.userTerminals ?? {};
 }
 
@@ -224,6 +237,7 @@ export class LiveStarlinkClient implements StarlinkClient {
         terminals.push(...result.value);
       } else {
         const reason = result.reason;
+        console.error(`[starlink] sync falló para ${accounts[i]?.label}:`, reason);
         errors.push({
           accountLabel: accounts[i]?.label ?? "desconocida",
           message:

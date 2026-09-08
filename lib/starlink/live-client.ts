@@ -138,13 +138,19 @@ type RawUserTerminal = {
   serviceLineNumber?: string | null;
 };
 
+// Every Starlink V2 endpoint wraps its real payload in this envelope.
+type ServiceResponse<T> = {
+  content?: T;
+  errors?: unknown[];
+  isValid?: boolean;
+};
+
 type UserTerminalsPage = {
-  content?: RawUserTerminal[];
   results?: RawUserTerminal[];
   isLastPage?: boolean;
 };
 
-type TelemetryQueryResponse = {
+type TelemetryQueryContent = {
   userTerminals?: Record<string, { timestamp: string; signalQuality: number }>;
 };
 
@@ -159,15 +165,15 @@ async function listUserTerminals(
 
   let page = 0;
   while (true) {
-    const data = (await apiGet(account, "/user-terminals", {
+    const response = (await apiGet(account, "/user-terminals", {
       page: String(page),
-    })) as UserTerminalsPage;
-    const rawItems = data.content ?? data.results ?? [];
+    })) as ServiceResponse<UserTerminalsPage>;
+    const rawItems = response.content?.results ?? [];
     const items = Array.isArray(rawItems) ? rawItems : [];
-    if (!Array.isArray(rawItems)) {
+    if (!Array.isArray(response.content?.results)) {
       console.error(
         `[starlink] respuesta inesperada de /user-terminals para ${account.label}:`,
-        JSON.stringify(data),
+        JSON.stringify(response),
       );
     }
     for (const t of items) {
@@ -177,7 +183,7 @@ async function listUserTerminals(
         serviceLineNumber: t.serviceLineNumber ?? null,
       });
     }
-    const isLastPage = data.isLastPage ?? true;
+    const isLastPage = response.content?.isLastPage ?? true;
     if (isLastPage || items.length === 0) break;
     page += 1;
   }
@@ -188,16 +194,16 @@ async function listUserTerminals(
 async function queryTelemetry(
   account: StarlinkAccount,
 ): Promise<Record<string, { timestamp: string; signalQuality: number }>> {
-  const data = (await apiPost(account, "/telemetry/query", {
+  const response = (await apiPost(account, "/telemetry/query", {
     includeUserTerminals: true,
-  })) as TelemetryQueryResponse;
-  if (!data.userTerminals) {
+  })) as ServiceResponse<TelemetryQueryContent>;
+  if (!response.content?.userTerminals) {
     console.error(
       `[starlink] respuesta inesperada de /telemetry/query para ${account.label}:`,
-      JSON.stringify(data),
+      JSON.stringify(response),
     );
   }
-  return data.userTerminals ?? {};
+  return response.content?.userTerminals ?? {};
 }
 
 async function listTerminalsForAccount(

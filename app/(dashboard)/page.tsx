@@ -27,10 +27,14 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
+  const [account, setAccount] = useState("");
+  const [accountOptions, setAccountOptions] = useState<string[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [importing, setImporting] = useState(false);
+  const [sortBy, setSortBy] = useState("last_seen_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const load = useCallback(
     async (opts: { silent?: boolean } = {}) => {
@@ -38,18 +42,41 @@ export default function DashboardPage() {
       const params = new URLSearchParams();
       if (q) params.set("q", q);
       if (status) params.set("status", status);
+      if (account) params.set("account", account);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
       const res = await fetch(`/api/antennas?${params.toString()}`);
       const data = await res.json();
       setAntennas(data.antennas ?? []);
       if (!opts.silent) setLoading(false);
     },
-    [q, status],
+    [q, status, account, sortBy, sortDir],
   );
+
+  function handleSortClick(column: string) {
+    if (sortBy === column) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDir("asc");
+    }
+  }
 
   useEffect(() => {
     const timeout = setTimeout(() => load(), 200);
     return () => clearTimeout(timeout);
   }, [load]);
+
+  const loadAccountOptions = useCallback(() => {
+    fetch("/api/antennas/accounts")
+      .then((res) => res.json())
+      .then((data) => setAccountOptions(data.accounts ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadAccountOptions();
+  }, [loadAccountOptions]);
 
   // Refresco silencioso: el cron de sincronización actualiza la base cada
   // pocos minutos, esto hace que el dashboard lo refleje sin recargar la página.
@@ -63,7 +90,8 @@ export default function DashboardPage() {
     const online = antennas.filter((a) => a.status === "online").length;
     const offline = antennas.filter((a) => a.status === "offline").length;
     const monthlyCost = antennas.reduce((sum, a) => sum + (Number(a.monthlyCost) || 0), 0);
-    return { total, online, offline, monthlyCost };
+    const onlinePct = total > 0 ? Math.round((online / total) * 100) : 0;
+    return { total, online, offline, monthlyCost, onlinePct };
   }, [antennas]);
 
   async function handleSync() {
@@ -105,6 +133,7 @@ export default function DashboardPage() {
       } else {
         setSyncMessage(`${data.created} antena(s) nueva(s) agregadas`);
         setUnmatchedCount(0);
+        loadAccountOptions();
       }
       await load();
     } finally {
@@ -114,9 +143,10 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <StatTile label="Total" value={stats.total} />
         <StatTile label="En línea" value={stats.online} />
+        <StatTile label="% en línea" value={`${stats.onlinePct}%`} />
         <StatTile label="Fuera de línea" value={stats.offline} />
         <StatTile label="Costo mensual" value={`$${stats.monthlyCost.toFixed(2)}`} />
       </div>
@@ -128,6 +158,18 @@ export default function DashboardPage() {
           onChange={(e) => setQ(e.target.value)}
           className="flex-1 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
         />
+        <select
+          value={account}
+          onChange={(e) => setAccount(e.target.value)}
+          className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
+        >
+          <option value="">Todas las cuentas</option>
+          {accountOptions.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -168,12 +210,12 @@ export default function DashboardPage() {
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 dark:bg-neutral-900 text-left">
             <tr>
-              <th className="px-4 py-2 font-medium">Sitio</th>
-              <th className="px-4 py-2 font-medium">Cuenta</th>
-              <th className="px-4 py-2 font-medium">Estado</th>
-              <th className="px-4 py-2 font-medium">Última conexión</th>
-              <th className="px-4 py-2 font-medium">Plan</th>
-              <th className="px-4 py-2 font-medium">Costo/mes</th>
+              <SortableHeader column="site_name" label="Sitio" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
+              <SortableHeader column="account_label" label="Cuenta" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
+              <SortableHeader column="status" label="Estado" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
+              <SortableHeader column="last_seen_at" label="Última conexión" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
+              <SortableHeader column="plan_name" label="Plan" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
+              <SortableHeader column="monthly_cost" label="Costo/mes" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
             </tr>
           </thead>
           <tbody>
@@ -227,6 +269,31 @@ export default function DashboardPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+function SortableHeader({
+  column,
+  label,
+  sortBy,
+  sortDir,
+  onClick,
+}: {
+  column: string;
+  label: string;
+  sortBy: string;
+  sortDir: "asc" | "desc";
+  onClick: (column: string) => void;
+}) {
+  const active = sortBy === column;
+  return (
+    <th
+      onClick={() => onClick(column)}
+      className="px-4 py-2 font-medium cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-800"
+    >
+      {label}
+      <span className="ml-1 text-neutral-400">{active ? (sortDir === "asc" ? "▲" : "▼") : ""}</span>
+    </th>
   );
 }
 

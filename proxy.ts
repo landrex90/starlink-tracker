@@ -4,7 +4,13 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
+  if (
+    pathname === "/login" ||
+    pathname.startsWith("/api/auth/") ||
+    pathname === "/api/starlink/sync"
+  ) {
+    // /api/starlink/sync does its own auth check (session cookie OR CRON_SECRET)
+    // so the scheduled cron job can call it without a browser session.
     return NextResponse.next();
   }
 

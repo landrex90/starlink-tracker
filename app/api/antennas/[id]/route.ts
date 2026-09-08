@@ -59,19 +59,3 @@ export async function PATCH(request: Request, { params }: Params) {
 
   return NextResponse.json({ antenna: updated });
 }
-
-export async function DELETE(_request: Request, { params }: Params) {
-  const { id } = await params;
-  const antennaId = Number(id);
-
-  const [deleted] = await db
-    .delete(antennas)
-    .where(eq(antennas.id, antennaId))
-    .returning();
-
-  if (!deleted) {
-    return NextResponse.json({ error: "No encontrada" }, { status: 404 });
-  }
-
-  return NextResponse.json({ ok: true });
-}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, use as usePromise } from "react";
-import { useRouter } from "next/navigation";
 
 type Antenna = {
   id: number;
@@ -20,7 +19,6 @@ type Note = { id: number; note: string; createdAt: string };
 
 export default function AntennaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
-  const router = useRouter();
   const [antenna, setAntenna] = useState<Antenna | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState("");
@@ -70,12 +68,6 @@ export default function AntennaDetailPage({ params }: { params: Promise<{ id: st
     await load();
   }
 
-  async function handleDelete() {
-    if (!confirm("¿Eliminar esta antena? Esta acción no se puede deshacer.")) return;
-    await fetch(`/api/antennas/${id}`, { method: "DELETE" });
-    router.push("/");
-  }
-
   async function handleAddNote() {
     if (!newNote.trim()) return;
     await fetch(`/api/antennas/${id}/notes`, {
@@ -91,12 +83,7 @@ export default function AntennaDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="flex flex-col gap-8 max-w-2xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">{antenna.siteName}</h1>
-        <button onClick={handleDelete} className="text-sm text-red-600 dark:text-red-400 hover:underline">
-          Eliminar
-        </button>
-      </div>
+      <h1 className="text-lg font-semibold">{antenna.siteName}</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Nombre del sitio">

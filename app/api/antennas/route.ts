@@ -6,11 +6,14 @@ import { antennas } from "@/db/schema";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
+  const account = searchParams.get("account");
   const q = searchParams.get("q");
-  const sort = searchParams.get("sort") ?? "last_seen_desc";
+  const sortBy = searchParams.get("sortBy") ?? "last_seen_at";
+  const sortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
 
   const conditions = [];
   if (status) conditions.push(eq(antennas.status, status));
+  if (account) conditions.push(eq(antennas.accountLabel, account));
   if (q) {
     conditions.push(
       or(
@@ -21,12 +24,17 @@ export async function GET(request: Request) {
     );
   }
 
-  const orderBy =
-    sort === "last_seen_asc"
-      ? asc(antennas.lastSeenAt)
-      : sort === "site_name"
-        ? asc(antennas.siteName)
-        : desc(antennas.lastSeenAt);
+  const SORT_COLUMNS = {
+    site_name: antennas.siteName,
+    account_label: antennas.accountLabel,
+    status: antennas.status,
+    last_seen_at: antennas.lastSeenAt,
+    plan_name: antennas.planName,
+    monthly_cost: antennas.monthlyCost,
+  } as const;
+
+  const column = SORT_COLUMNS[sortBy as keyof typeof SORT_COLUMNS] ?? antennas.lastSeenAt;
+  const orderBy = sortDir === "asc" ? asc(column) : desc(column);
 
   const rows = await db
     .select()

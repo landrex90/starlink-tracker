@@ -3,8 +3,28 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { antennas } from "@/db/schema";
 import { getStarlinkClient, hasStarlinkCredentials } from "@/lib/starlink";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
-export async function POST() {
+async function isAuthorized(request: Request): Promise<boolean> {
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const sessionMatch = cookieHeader
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${SESSION_COOKIE}=`));
+  const sessionToken = sessionMatch?.slice(SESSION_COOKIE.length + 1);
+  if (await verifySessionToken(sessionToken)) return true;
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+  const authHeader = request.headers.get("authorization") ?? "";
+  return authHeader === `Bearer ${cronSecret}`;
+}
+
+export async function POST(request: Request) {
+  if (!(await isAuthorized(request))) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
   if (!hasStarlinkCredentials()) {
     return NextResponse.json({
       mode: "mock",

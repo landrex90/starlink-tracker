@@ -31,7 +31,9 @@ Requiere una cuenta **Starlink Enterprise** con un Service Account creado en `ad
 [{"label":"Mi Organización","clientId":"...","clientSecret":"..."}]
 ```
 
-Con esto configurado, el botón **"Sync now"** del dashboard trae el estado (online/offline), última conexión y calidad de señal de cada terminal, y los cruza con las antenas existentes por `terminal_id` — nunca sobreescribe sitio, ubicación, plan, costo o notas ingresados a mano.
+Con esto configurado, el botón **"Sync now"** del dashboard trae el estado (online/offline), última conexión y calidad de señal de cada terminal, y los cruza con las antenas existentes por `terminal_id` — nunca sobreescribe sitio, ubicación, plan, costo o notas ingresados a mano. El dashboard además se refresca solo cada 15s leyendo la base de datos (no la API de Starlink), así que cualquier sincronización reciente se ve reflejada sin recargar la página.
+
+La sincronización es manual a propósito (Render no ofrece cron jobs gratis — cuestan mínimo $1/mes). Si más adelante quieres automatizarla sin costo, define `CRON_SECRET` como variable de entorno y agrega un workflow de GitHub Actions con `schedule:` que haga `POST` a `https://tu-app.onrender.com/api/starlink/sync` con `Authorization: Bearer <CRON_SECRET>`.
 
 La API V1 de Starlink se descontinúa el 1 de junio de 2026; este cliente usa V2 (`api/public/v2`) directamente.
 
@@ -53,4 +55,4 @@ El repo incluye `render.yaml` (Blueprint). Pasos:
 2. En Render: **New +** → **Blueprint** → selecciona el repo.
 3. Render detecta `render.yaml` y provisiona el web service + Postgres automáticamente.
 4. Cuando te lo pida, completa manualmente `ADMIN_PASSWORD_HASH` y `STARLINK_ACCOUNTS` (marcados como `sync: false`, no se guardan en el repo).
-5. La migración (`drizzle-kit push`) corre automáticamente antes de cada deploy vía `preDeployCommand`.
+5. La migración (`drizzle-kit push`) corre automáticamente en cada deploy como parte del `buildCommand` (el tier gratis de Render no soporta `preDeployCommand`).

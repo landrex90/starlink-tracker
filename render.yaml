@@ -9,8 +9,7 @@ services:
     type: web
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
-    preDeployCommand: npx drizzle-kit push
+    buildCommand: npm install && npx drizzle-kit push && npm run build
     startCommand: npm run start
     envVars:
       - key: NODE_ENV
@@ -24,4 +23,10 @@ services:
       - key: ADMIN_PASSWORD_HASH
         sync: false
       - key: STARLINK_ACCOUNTS
+        sync: false
+      # Opcional: si más adelante quieres automatizar la sincronización gratis
+      # (p.ej. un GitHub Actions workflow con cron que llame a /api/starlink/sync
+      # con este bearer token), define un valor aquí. Sin esto, la sincronización
+      # es manual vía el botón "Sync now" del dashboard.
+      - key: CRON_SECRET
         sync: false

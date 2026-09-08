@@ -14,6 +14,8 @@ export const antennas = pgTable(
     id: serial("id").primaryKey(),
     siteName: text("site_name").notNull(),
     location: text("location"),
+    latitude: numeric("latitude"),
+    longitude: numeric("longitude"),
     accountLabel: text("account_label"), // which Starlink account this terminal belongs to
     terminalId: text("terminal_id").unique(),
     kitSerialNumber: text("kit_serial_number"), // physical dish kit serial (# KIT)

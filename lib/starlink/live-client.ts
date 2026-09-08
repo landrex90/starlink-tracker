@@ -158,6 +158,7 @@ type TelemetryQueryContent = {
 type RawServiceLine = {
   serviceLineNumber: string;
   nickname?: string | null;
+  addressReferenceId?: string | null;
 };
 
 type ServiceLinesPage = {
@@ -165,13 +166,16 @@ type ServiceLinesPage = {
   isLastPage?: boolean;
 };
 
+type ServiceLineInfo = { nickname: string | null; addressReferenceId: string | null };
+
 // The human-readable name installers set in the Starlink portal usually lives
 // on the service line, not the physical terminal (whose nickname is almost
-// always null in practice).
-async function listServiceLineNicknames(
+// always null in practice). The service line is also the only place linking
+// a terminal to its installed address.
+async function listServiceLineInfo(
   account: StarlinkAccount,
-): Promise<Record<string, string>> {
-  const nicknames: Record<string, string> = {};
+): Promise<Record<string, ServiceLineInfo>> {
+  const info: Record<string, ServiceLineInfo> = {};
 
   let page = 0;
   while (true) {
@@ -181,14 +185,56 @@ async function listServiceLineNicknames(
     const rawItems = response.content?.results ?? [];
     const items = Array.isArray(rawItems) ? rawItems : [];
     for (const line of items) {
-      if (line.nickname) nicknames[line.serviceLineNumber] = line.nickname;
+      info[line.serviceLineNumber] = {
+        nickname: line.nickname ?? null,
+        addressReferenceId: line.addressReferenceId ?? null,
+      };
     }
     const isLastPage = response.content?.isLastPage ?? true;
     if (isLastPage || items.length === 0) break;
     page += 1;
   }
 
-  return nicknames;
+  return info;
+}
+
+type RawAddress = {
+  addressReferenceId: string;
+  formattedAddress?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+type AddressesPage = {
+  results?: RawAddress[];
+  isLastPage?: boolean;
+};
+
+type AddressInfo = { formattedAddress: string | null; latitude: number | null; longitude: number | null };
+
+async function listAddresses(account: StarlinkAccount): Promise<Record<string, AddressInfo>> {
+  const addresses: Record<string, AddressInfo> = {};
+
+  let page = 0;
+  while (true) {
+    const response = (await apiGet(account, "/addresses", {
+      page: String(page),
+    })) as ServiceResponse<AddressesPage>;
+    const rawItems = response.content?.results ?? [];
+    const items = Array.isArray(rawItems) ? rawItems : [];
+    for (const address of items) {
+      addresses[address.addressReferenceId] = {
+        formattedAddress: address.formattedAddress ?? null,
+        latitude: address.latitude ?? null,
+        longitude: address.longitude ?? null,
+      };
+    }
+    const isLastPage = response.content?.isLastPage ?? true;
+    if (isLastPage || items.length === 0) break;
+    page += 1;
+  }
+
+  return addresses;
 }
 
 async function listUserTerminals(account: StarlinkAccount): Promise<
@@ -253,25 +299,28 @@ async function queryTelemetry(
 async function listTerminalsForAccount(
   account: StarlinkAccount,
 ): Promise<TerminalTelemetry[]> {
-  const [terminals, telemetry, serviceLineNicknames] = await Promise.all([
+  const [terminals, telemetry, serviceLines, addresses] = await Promise.all([
     listUserTerminals(account),
     queryTelemetry(account),
-    listServiceLineNicknames(account),
+    listServiceLineInfo(account),
+    listAddresses(account),
   ]);
 
   return terminals.map((terminal) => {
     const reading = telemetry[terminal.userTerminalId];
-    const serviceLineNickname = terminal.serviceLineNumber
-      ? serviceLineNicknames[terminal.serviceLineNumber]
-      : undefined;
+    const serviceLine = terminal.serviceLineNumber ? serviceLines[terminal.serviceLineNumber] : undefined;
+    const address = serviceLine?.addressReferenceId ? addresses[serviceLine.addressReferenceId] : undefined;
     return {
       terminalId: terminal.userTerminalId,
       accountLabel: account.label,
       serviceLineNumber: terminal.serviceLineNumber,
       // service line nickname (set per-site in the Starlink portal) takes
       // priority — the terminal's own nickname is almost always empty.
-      nickname: serviceLineNickname ?? terminal.nickname,
+      nickname: serviceLine?.nickname ?? terminal.nickname,
       kitSerialNumber: terminal.kitSerialNumber,
+      formattedAddress: address?.formattedAddress ?? null,
+      latitude: address?.latitude ?? null,
+      longitude: address?.longitude ?? null,
       online: Boolean(reading),
       lastSeenAt: reading?.timestamp ?? null,
       signalQuality: reading?.signalQuality ?? null,

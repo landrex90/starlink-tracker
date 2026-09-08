@@ -47,6 +47,8 @@ export async function GET(request: Request) {
   const headers = [
     "site_name",
     "location",
+    "latitude",
+    "longitude",
     "account_label",
     "terminal_id",
     "kit_serial_number",
@@ -60,6 +62,8 @@ export async function GET(request: Request) {
   const csvRows = rows.map((a) => [
     a.siteName,
     a.location,
+    a.latitude,
+    a.longitude,
     a.accountLabel,
     a.terminalId,
     a.kitSerialNumber,

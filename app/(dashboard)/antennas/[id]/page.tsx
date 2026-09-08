@@ -6,6 +6,8 @@ type Antenna = {
   id: number;
   siteName: string;
   location: string | null;
+  latitude: string | null;
+  longitude: string | null;
   accountLabel: string | null;
   terminalId: string | null;
   kitSerialNumber: string | null;
@@ -127,6 +129,18 @@ export default function AntennaDetailPage({ params }: { params: Promise<{ id: st
             onChange={(e) => set("monthlyCost", e.target.value)}
           />
         </Field>
+        {antenna.latitude && antenna.longitude && (
+          <Field label="Coordenadas (sincronizado)">
+            <a
+              href={`https://www.google.com/maps?q=${antenna.latitude},${antenna.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="input block hover:underline text-blue-600 dark:text-blue-400"
+            >
+              {antenna.latitude}, {antenna.longitude} — Ver en Google Maps
+            </a>
+          </Field>
+        )}
         <Field label="Estado (sincronizado)">
           <input className="input opacity-70" value={antenna.status} readOnly />
         </Field>

@@ -4,6 +4,9 @@ export type TerminalTelemetry = {
   serviceLineNumber: string | null;
   nickname: string | null;
   kitSerialNumber: string | null;
+  formattedAddress: string | null;
+  latitude: number | null;
+  longitude: number | null;
   online: boolean;
   lastSeenAt: string | null; // ISO timestamp, only set when online is true
   signalQuality: number | null; // 0-1, higher is better

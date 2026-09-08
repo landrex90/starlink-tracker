@@ -11,11 +11,12 @@ Panel de seguimiento para antenas Starlink: ubicación, estado de conexión, pla
 - Vista de detalle por antena: edición de sitio/ubicación/cuenta/terminal/kit/plan/costo, timeline de notas de mantenimiento. Sin opción de eliminar (a propósito, ver abajo).
 - Alta manual de antenas y carga masiva por CSV.
 - Exportación a CSV/Excel respetando los filtros y el orden activos en la tabla.
-- Sincronización con Starlink API V2 ("Sync now"): trae estado online/offline, última conexión, calidad de señal, # de kit, y dirección/GPS reales (cuando `location` está vacío); nunca sobreescribe campos editados a mano (sitio, ubicación, plan, costo, notas). También rellena el nombre real (service-line nickname de Starlink) solo si el nombre actual todavía es el ID crudo.
-- Botón para crear de una vez las antenas de terminales de Starlink que aún no existen en el dashboard ("N terminal(es) sin vincular" → agregar).
+- Sincronización con Starlink API V2 — **un solo botón, "Sync now", hace todo**: actualiza estado online/offline, última conexión, calidad de señal, # de kit y GPS de antenas existentes; crea automáticamente las que falten; corrige el nombre real (service-line nickname) solo si el nombre actual todavía es el ID crudo; y limpia ubicaciones repetidas que hayan quedado mal por un bug anterior. Nunca sobreescribe campos editados a mano (sitio, ubicación, plan, costo, notas).
 - Auth simple de un solo admin (cookie firmada, sin tabla de usuarios).
 
-**Decisión deliberada:** no hay botón de eliminar antenas en la UI ni endpoint DELETE en la API — se quitó a pedido del usuario para evitar borrados accidentales.
+**Decisiones deliberadas:**
+- No hay botón de eliminar antenas en la UI ni endpoint DELETE en la API — se quitó a pedido del usuario para evitar borrados accidentales.
+- No hay botones de acción separados para tareas de sincronización/corrección — todo vive dentro de "Sync now" a pedido explícito del usuario, incluso limpiezas que en principio son "de una sola vez".
 
 ## Desarrollo local
 
@@ -46,11 +47,12 @@ Requiere una cuenta **Starlink Enterprise** con un Service Account creado en `ad
 [{"label":"Mi Organización","clientId":"...","clientSecret":"..."}]
 ```
 
-El cliente (`lib/starlink/live-client.ts`) llama cuatro endpoints de la API V2 por cuenta y los cruza:
+El cliente (`lib/starlink/live-client.ts`) llama tres endpoints de la API V2 por cuenta y los cruza:
 - `GET /user-terminals` — terminales físicos, kit serial number, service line asociado.
-- `GET /service-lines` — trae el **nickname real** configurado en el portal de Starlink por sitio (el nickname del terminal en sí casi siempre viene vacío), y el `addressReferenceId` para ubicar el sitio.
-- `GET /addresses` — dirección formateada + lat/long del `addressReferenceId` de arriba. El sync rellena `location` solo si está vacío (nunca sobreescribe una ubicación escrita a mano); lat/long se actualizan siempre porque no tienen entrada manual en la UI.
-- `POST /telemetry/query` — estado más reciente (online si el terminal aparece en la respuesta, señal, timestamp).
+- `GET /service-lines` — trae el **nickname real** configurado en el portal de Starlink por sitio (el nickname del terminal en sí casi siempre viene vacío).
+- `POST /telemetry/query` — estado más reciente (online si el terminal aparece en la respuesta, señal, timestamp) y `h3CellId`, la posición GPS real del dish en el momento — se convierte a lat/long con `h3-js`.
+
+**Nota importante:** el endpoint `/addresses` + `addressReferenceId` del service line **no** sirve para ubicar una antena individual — es una dirección de facturación/cumplimiento que los instaladores suelen reutilizar igual en todas las líneas de una cuenta (confirmado: las 179 antenas de Alcaldía de Pereira resolvían a la misma dirección genérica). La ubicación real por antena viene del `h3CellId` reportado en la telemetría de cada dish.
 
 Toda respuesta de la API V2 viene envuelta en un objeto `{content: {...}, errors, isValid}` — el cliente ya maneja ese envoltorio.
 

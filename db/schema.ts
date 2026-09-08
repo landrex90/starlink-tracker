@@ -16,6 +16,7 @@ export const antennas = pgTable(
     location: text("location"),
     accountLabel: text("account_label"), // which Starlink account this terminal belongs to
     terminalId: text("terminal_id").unique(),
+    kitSerialNumber: text("kit_serial_number"), // physical dish kit serial (# KIT)
     status: text("status").notNull().default("unknown"), // 'online' | 'offline' | 'unknown'
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     signalQuality: numeric("signal_quality"),

@@ -136,6 +136,7 @@ type RawUserTerminal = {
   userTerminalId: string;
   nickname?: string | null;
   serviceLineNumber?: string | null;
+  kitSerialNumber?: string | null;
 };
 
 // Every Starlink V2 endpoint wraps its real payload in this envelope.
@@ -190,13 +191,19 @@ async function listServiceLineNicknames(
   return nicknames;
 }
 
-async function listUserTerminals(
-  account: StarlinkAccount,
-): Promise<Array<{ userTerminalId: string; nickname: string | null; serviceLineNumber: string | null }>> {
+async function listUserTerminals(account: StarlinkAccount): Promise<
+  Array<{
+    userTerminalId: string;
+    nickname: string | null;
+    serviceLineNumber: string | null;
+    kitSerialNumber: string | null;
+  }>
+> {
   const results: Array<{
     userTerminalId: string;
     nickname: string | null;
     serviceLineNumber: string | null;
+    kitSerialNumber: string | null;
   }> = [];
 
   let page = 0;
@@ -217,6 +224,7 @@ async function listUserTerminals(
         userTerminalId: t.userTerminalId,
         nickname: t.nickname ?? null,
         serviceLineNumber: t.serviceLineNumber ?? null,
+        kitSerialNumber: t.kitSerialNumber ?? null,
       });
     }
     const isLastPage = response.content?.isLastPage ?? true;
@@ -263,6 +271,7 @@ async function listTerminalsForAccount(
       // service line nickname (set per-site in the Starlink portal) takes
       // priority — the terminal's own nickname is almost always empty.
       nickname: serviceLineNickname ?? terminal.nickname,
+      kitSerialNumber: terminal.kitSerialNumber,
       online: Boolean(reading),
       lastSeenAt: reading?.timestamp ?? null,
       signalQuality: reading?.signalQuality ?? null,

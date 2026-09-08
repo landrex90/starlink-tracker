@@ -25,6 +25,7 @@ export async function POST(request: Request) {
         siteName: row.site_name,
         location: row.location || null,
         terminalId: row.terminal_id || null,
+        kitSerialNumber: row.kit_serial_number || null,
         planName: row.plan_name || null,
         monthlyCost: row.monthly_cost ? row.monthly_cost : null,
         status: row.status || "unknown",

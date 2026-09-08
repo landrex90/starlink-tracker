@@ -9,6 +9,7 @@ type Antenna = {
   location: string | null;
   accountLabel: string | null;
   terminalId: string | null;
+  kitSerialNumber: string | null;
   status: string;
   lastSeenAt: string | null;
   signalQuality: string | null;
@@ -37,21 +38,25 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [stats, setStats] = useState({ total: 0, online: 0, offline: 0, monthlyCost: 0, onlinePct: 0 });
 
+  const buildFilterParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (status) params.set("status", status);
+    if (account) params.set("account", account);
+    params.set("sortBy", sortBy);
+    params.set("sortDir", sortDir);
+    return params;
+  }, [q, status, account, sortBy, sortDir]);
+
   const load = useCallback(
     async (opts: { silent?: boolean } = {}) => {
       if (!opts.silent) setLoading(true);
-      const params = new URLSearchParams();
-      if (q) params.set("q", q);
-      if (status) params.set("status", status);
-      if (account) params.set("account", account);
-      params.set("sortBy", sortBy);
-      params.set("sortDir", sortDir);
-      const res = await fetch(`/api/antennas?${params.toString()}`);
+      const res = await fetch(`/api/antennas?${buildFilterParams().toString()}`);
       const data = await res.json();
       setAntennas(data.antennas ?? []);
       if (!opts.silent) setLoading(false);
     },
-    [q, status, account, sortBy, sortDir],
+    [buildFilterParams],
   );
 
   const loadStats = useCallback(async () => {
@@ -204,6 +209,12 @@ export default function DashboardPage() {
         >
           {syncing ? "Sincronizando..." : "Sync now"}
         </button>
+        <a
+          href={`/api/antennas/export?${buildFilterParams().toString()}`}
+          className="rounded-md border border-neutral-300 dark:border-neutral-700 px-4 py-2 text-sm font-medium whitespace-nowrap text-center"
+        >
+          Exportar Excel
+        </a>
       </div>
 
       {syncMessage && (
@@ -229,6 +240,7 @@ export default function DashboardPage() {
             <tr>
               <SortableHeader column="site_name" label="Sitio" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
               <SortableHeader column="account_label" label="Cuenta" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
+              <SortableHeader column="kit_serial_number" label="# Kit" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
               <SortableHeader column="status" label="Estado" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
               <SortableHeader column="last_seen_at" label="Última conexión" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
               <SortableHeader column="plan_name" label="Plan" sortBy={sortBy} sortDir={sortDir} onClick={handleSortClick} />
@@ -238,14 +250,14 @@ export default function DashboardPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-neutral-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
                   Cargando...
                 </td>
               </tr>
             )}
             {!loading && antennas.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-neutral-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
                   Sin antenas registradas todavía.
                 </td>
               </tr>
@@ -265,6 +277,9 @@ export default function DashboardPage() {
                 </td>
                 <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">
                   {a.accountLabel ?? "—"}
+                </td>
+                <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">
+                  {a.kitSerialNumber ?? "—"}
                 </td>
                 <td className="px-4 py-2">
                   <span

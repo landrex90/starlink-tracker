@@ -50,6 +50,7 @@ export type AntennaCsvRow = {
   site_name: string;
   location?: string;
   terminal_id?: string;
+  kit_serial_number?: string;
   plan_name?: string;
   monthly_cost?: string;
   status?: string;
@@ -87,4 +88,20 @@ export function parseAntennaCsv(text: string): {
   }
 
   return { rows, errors };
+}
+
+function escapeCsvField(value: unknown): string {
+  const str = value === null || value === undefined ? "" : String(value);
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+export function toCsv(headers: string[], rows: unknown[][]): string {
+  const lines = [headers.map(escapeCsvField).join(",")];
+  for (const row of rows) {
+    lines.push(row.map(escapeCsvField).join(","));
+  }
+  return lines.join("\r\n");
 }

@@ -10,6 +10,7 @@ export default function NewAntennaPage() {
     location: "",
     accountLabel: "",
     terminalId: "",
+    kitSerialNumber: "",
     planName: "",
     monthlyCost: "",
   });
@@ -71,6 +72,13 @@ export default function NewAntennaPage() {
         <input
           value={form.terminalId}
           onChange={(e) => set("terminalId", e.target.value)}
+          className="input"
+        />
+      </Field>
+      <Field label="# Kit">
+        <input
+          value={form.kitSerialNumber}
+          onChange={(e) => set("kitSerialNumber", e.target.value)}
           className="input"
         />
       </Field>

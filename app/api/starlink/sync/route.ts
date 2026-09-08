@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       status: terminal.online ? "online" : "offline",
       lastSeenAt: terminal.lastSeenAt ? new Date(terminal.lastSeenAt) : null,
       signalQuality: terminal.signalQuality !== null ? String(terminal.signalQuality) : null,
+      kitSerialNumber: terminal.kitSerialNumber,
       updatedAt: new Date(),
     };
 

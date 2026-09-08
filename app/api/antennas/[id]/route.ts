@@ -32,6 +32,7 @@ const EDITABLE_FIELDS = [
   "location",
   "accountLabel",
   "terminalId",
+  "kitSerialNumber",
   "planName",
   "monthlyCost",
   "status",

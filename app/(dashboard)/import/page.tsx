@@ -34,7 +34,7 @@ export default function ImportPage() {
       <div className="rounded-md border border-neutral-200 dark:border-neutral-800 p-4 text-sm text-neutral-600 dark:text-neutral-400">
         <p className="mb-2">Columnas esperadas (encabezados sin distinguir mayúsculas):</p>
         <code className="text-xs">
-          site_name, location, terminal_id, plan_name, monthly_cost, status, notes
+          site_name, location, terminal_id, kit_serial_number, plan_name, monthly_cost, status, notes
         </code>
         <p className="mt-2">
           Solo <code>site_name</code> es obligatorio. Si <code>terminal_id</code> ya existe, la fila

@@ -41,6 +41,7 @@ export async function POST(request: Request) {
       siteName: terminal.nickname || terminal.terminalId,
       accountLabel: terminal.accountLabel,
       terminalId: terminal.terminalId,
+      kitSerialNumber: terminal.kitSerialNumber,
       status: terminal.online ? "online" : "offline",
       lastSeenAt: terminal.lastSeenAt ? new Date(terminal.lastSeenAt) : null,
       signalQuality: terminal.signalQuality !== null ? String(terminal.signalQuality) : null,

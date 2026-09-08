@@ -8,6 +8,7 @@ type Antenna = {
   location: string | null;
   accountLabel: string | null;
   terminalId: string | null;
+  kitSerialNumber: string | null;
   status: string;
   lastSeenAt: string | null;
   signalQuality: string | null;
@@ -55,6 +56,7 @@ export default function AntennaDetailPage({ params }: { params: Promise<{ id: st
         location: antenna.location,
         accountLabel: antenna.accountLabel,
         terminalId: antenna.terminalId,
+        kitSerialNumber: antenna.kitSerialNumber,
         planName: antenna.planName,
         monthlyCost: antenna.monthlyCost || null,
       }),
@@ -104,6 +106,13 @@ export default function AntennaDetailPage({ params }: { params: Promise<{ id: st
             className="input"
             value={antenna.terminalId ?? ""}
             onChange={(e) => set("terminalId", e.target.value)}
+          />
+        </Field>
+        <Field label="# Kit">
+          <input
+            className="input"
+            value={antenna.kitSerialNumber ?? ""}
+            onChange={(e) => set("kitSerialNumber", e.target.value)}
           />
         </Field>
         <Field label="Plan">

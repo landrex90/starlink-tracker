@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { antennas } from "@/db/schema";
+import { toCsv } from "@/lib/csv";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -44,29 +44,39 @@ export async function GET(request: Request) {
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(orderBy);
 
-  return NextResponse.json({ antennas: rows });
-}
+  const headers = [
+    "site_name",
+    "location",
+    "account_label",
+    "terminal_id",
+    "kit_serial_number",
+    "status",
+    "last_seen_at",
+    "signal_quality",
+    "plan_name",
+    "monthly_cost",
+  ];
 
-export async function POST(request: Request) {
-  const body = await request.json();
+  const csvRows = rows.map((a) => [
+    a.siteName,
+    a.location,
+    a.accountLabel,
+    a.terminalId,
+    a.kitSerialNumber,
+    a.status,
+    a.lastSeenAt ? a.lastSeenAt.toISOString() : "",
+    a.signalQuality,
+    a.planName,
+    a.monthlyCost,
+  ]);
 
-  if (!body.siteName || typeof body.siteName !== "string") {
-    return NextResponse.json({ error: "site_name es requerido" }, { status: 400 });
-  }
+  const csv = toCsv(headers, csvRows);
+  const timestamp = new Date().toISOString().slice(0, 10);
 
-  const [created] = await db
-    .insert(antennas)
-    .values({
-      siteName: body.siteName,
-      location: body.location ?? null,
-      accountLabel: body.accountLabel ?? null,
-      terminalId: body.terminalId ?? null,
-      kitSerialNumber: body.kitSerialNumber ?? null,
-      planName: body.planName ?? null,
-      monthlyCost: body.monthlyCost ?? null,
-      status: body.status ?? "unknown",
-    })
-    .returning();
-
-  return NextResponse.json({ antenna: created }, { status: 201 });
+  return new Response(`﻿${csv}`, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="antenas-${timestamp}.csv"`,
+    },
+  });
 }

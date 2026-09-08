@@ -1,6 +1,21 @@
 # Starlink Tracker
 
-Panel de seguimiento para antenas Starlink: ubicación, estado de conexión, plan/costo y notas de mantenimiento. Funciona completamente con datos manuales; la sincronización con la API de Starlink Enterprise es opcional y se activa solo con variables de entorno.
+Panel de seguimiento para antenas Starlink: ubicación, estado de conexión, plan/costo, # de kit y notas de mantenimiento. Funciona completamente con datos manuales; la sincronización con la API de Starlink Enterprise es opcional y se activa solo con variables de entorno.
+
+**En producción:** https://starlink-tracker-7ytn.onrender.com
+
+## Funcionalidad actual
+
+- Dashboard con tabla de antenas: búsqueda, filtro por cuenta Starlink y por estado, encabezados clicleables para ordenar por cualquier columna.
+- Tiles de resumen (total, en línea, % en línea, fuera de línea, costo mensual) calculados sobre el total real, no sobre la vista filtrada.
+- Vista de detalle por antena: edición de sitio/ubicación/cuenta/terminal/kit/plan/costo, timeline de notas de mantenimiento. Sin opción de eliminar (a propósito, ver abajo).
+- Alta manual de antenas y carga masiva por CSV.
+- Exportación a CSV/Excel respetando los filtros y el orden activos en la tabla.
+- Sincronización con Starlink API V2 ("Sync now"): trae estado online/offline, última conexión, calidad de señal y # de kit; nunca sobreescribe campos editados a mano (sitio, ubicación, plan, costo, notas). También rellena el nombre real (service-line nickname de Starlink) solo si el nombre actual todavía es el ID crudo.
+- Botón para crear de una vez las antenas de terminales de Starlink que aún no existen en el dashboard ("N terminal(es) sin vincular" → agregar).
+- Auth simple de un solo admin (cookie firmada, sin tabla de usuarios).
+
+**Decisión deliberada:** no hay botón de eliminar antenas en la UI ni endpoint DELETE en la API — se quitó a pedido del usuario para evitar borrados accidentales.
 
 ## Desarrollo local
 
@@ -31,28 +46,33 @@ Requiere una cuenta **Starlink Enterprise** con un Service Account creado en `ad
 [{"label":"Mi Organización","clientId":"...","clientSecret":"..."}]
 ```
 
-Con esto configurado, el botón **"Sync now"** del dashboard trae el estado (online/offline), última conexión y calidad de señal de cada terminal, y los cruza con las antenas existentes por `terminal_id` — nunca sobreescribe sitio, ubicación, plan, costo o notas ingresados a mano. El dashboard además se refresca solo cada 15s leyendo la base de datos (no la API de Starlink), así que cualquier sincronización reciente se ve reflejada sin recargar la página.
+El cliente (`lib/starlink/live-client.ts`) llama tres endpoints de la API V2 por cuenta y los cruza:
+- `GET /user-terminals` — terminales físicos, kit serial number, service line asociado.
+- `GET /service-lines` — trae el **nickname real** configurado en el portal de Starlink por sitio (el nickname del terminal en sí casi siempre viene vacío).
+- `POST /telemetry/query` — estado más reciente (online si el terminal aparece en la respuesta, señal, timestamp).
 
-La sincronización es manual a propósito (Render no ofrece cron jobs gratis — cuestan mínimo $1/mes). Si más adelante quieres automatizarla sin costo, define `CRON_SECRET` como variable de entorno y agrega un workflow de GitHub Actions con `schedule:` que haga `POST` a `https://tu-app.onrender.com/api/starlink/sync` con `Authorization: Bearer <CRON_SECRET>`.
+Toda respuesta de la API V2 viene envuelta en un objeto `{content: {...}, errors, isValid}` — el cliente ya maneja ese envoltorio.
 
-La API V1 de Starlink se descontinúa el 1 de junio de 2026; este cliente usa V2 (`api/public/v2`) directamente.
+La sincronización es manual a propósito (Render no ofrece cron jobs gratis — cuestan mínimo $1/mes). Si más adelante quieres automatizarla sin costo, define `CRON_SECRET` como variable de entorno y agrega un workflow de GitHub Actions con `schedule:` que haga `POST` a `https://starlink-tracker-7ytn.onrender.com/api/starlink/sync` con `Authorization: Bearer <CRON_SECRET>`.
+
+La API V1 de Starlink se descontinúa el 1 de junio de 2026; este cliente usa V2 directamente.
 
 ## Importación masiva (CSV)
 
 Desde `/import`, columnas esperadas (sin distinguir mayúsculas):
 
 ```
-site_name, location, terminal_id, plan_name, monthly_cost, status, notes
+site_name, location, terminal_id, kit_serial_number, plan_name, monthly_cost, status, notes
 ```
 
 Solo `site_name` es obligatorio. Si `terminal_id` ya existe, la fila actualiza esa antena en vez de crear una nueva.
 
 ## Despliegue en Render
 
-El repo incluye `render.yaml` (Blueprint). Pasos:
+El repo incluye `render.yaml` (Blueprint) — ya desplegado. Para replicarlo en otra cuenta:
 
 1. Sube el repo a GitHub.
 2. En Render: **New +** → **Blueprint** → selecciona el repo.
-3. Render detecta `render.yaml` y provisiona el web service + Postgres automáticamente.
+3. Render detecta `render.yaml` y provisiona el web service + Postgres automáticamente (ambos en tier gratis).
 4. Cuando te lo pida, completa manualmente `ADMIN_PASSWORD_HASH` y `STARLINK_ACCOUNTS` (marcados como `sync: false`, no se guardan en el repo).
-5. La migración (`drizzle-kit push`) corre automáticamente en cada deploy como parte del `buildCommand` (el tier gratis de Render no soporta `preDeployCommand`).
+5. La migración (`drizzle-kit push`) corre automáticamente en cada deploy como parte del `buildCommand` (el tier gratis de Render no soporta `preDeployCommand`, y hay que forzar `npm install --include=dev` porque `NODE_ENV=production` de otro modo se salta las devDependencies que incluyen `drizzle-kit` y las herramientas de build de Next.js).

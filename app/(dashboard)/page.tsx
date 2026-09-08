@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 
 type Antenna = {
@@ -33,8 +33,10 @@ export default function DashboardPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [importing, setImporting] = useState(false);
+  const [fixingNames, setFixingNames] = useState(false);
   const [sortBy, setSortBy] = useState("last_seen_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [stats, setStats] = useState({ total: 0, online: 0, offline: 0, monthlyCost: 0, onlinePct: 0 });
 
   const load = useCallback(
     async (opts: { silent?: boolean } = {}) => {
@@ -52,6 +54,31 @@ export default function DashboardPage() {
     },
     [q, status, account, sortBy, sortDir],
   );
+
+  const loadStats = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (account) params.set("account", account);
+    const res = await fetch(`/api/antennas/stats?${params.toString()}`);
+    const data = await res.json();
+    setStats({
+      total: data.total ?? 0,
+      online: data.online ?? 0,
+      offline: data.offline ?? 0,
+      monthlyCost: data.monthlyCost ?? 0,
+      onlinePct: data.onlinePct ?? 0,
+    });
+  }, [q, account]);
+
+  useEffect(() => {
+    const timeout = setTimeout(loadStats, 200);
+    return () => clearTimeout(timeout);
+  }, [loadStats]);
+
+  useEffect(() => {
+    const interval = setInterval(loadStats, 15_000);
+    return () => clearInterval(interval);
+  }, [loadStats]);
 
   function handleSortClick(column: string) {
     if (sortBy === column) {
@@ -85,15 +112,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [load]);
 
-  const stats = useMemo(() => {
-    const total = antennas.length;
-    const online = antennas.filter((a) => a.status === "online").length;
-    const offline = antennas.filter((a) => a.status === "offline").length;
-    const monthlyCost = antennas.reduce((sum, a) => sum + (Number(a.monthlyCost) || 0), 0);
-    const onlinePct = total > 0 ? Math.round((online / total) * 100) : 0;
-    return { total, online, offline, monthlyCost, onlinePct };
-  }, [antennas]);
-
   async function handleSync() {
     setSyncing(true);
     setSyncMessage(null);
@@ -117,7 +135,7 @@ export default function DashboardPage() {
           );
         setSyncMessage(parts.join(" — "));
       }
-      await load();
+      await Promise.all([load(), loadStats()]);
     } finally {
       setSyncing(false);
     }
@@ -135,9 +153,23 @@ export default function DashboardPage() {
         setUnmatchedCount(0);
         loadAccountOptions();
       }
-      await load();
+      await Promise.all([load(), loadStats()]);
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handleFixNames() {
+    setFixingNames(true);
+    try {
+      const res = await fetch("/api/starlink/fix-names", { method: "POST" });
+      const data = await res.json();
+      setSyncMessage(
+        res.ok ? `${data.fixed} nombre(s) corregido(s)` : data.error ?? "Error al corregir nombres",
+      );
+      await load();
+    } finally {
+      setFixingNames(false);
     }
   }
 
@@ -186,6 +218,14 @@ export default function DashboardPage() {
           className="rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-4 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
         >
           {syncing ? "Sincronizando..." : "Sync now"}
+        </button>
+        <button
+          onClick={handleFixNames}
+          disabled={fixingNames}
+          title="Corrige el nombre de antenas que se crearon con el ID crudo de Starlink, usando el nombre real del service line. No toca nombres que ya editaste a mano."
+          className="rounded-md border border-neutral-300 dark:border-neutral-700 px-4 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+        >
+          {fixingNames ? "Corrigiendo..." : "Corregir nombres"}
         </button>
       </div>
 

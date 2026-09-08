@@ -154,6 +154,42 @@ type TelemetryQueryContent = {
   userTerminals?: Record<string, { timestamp: string; signalQuality: number }>;
 };
 
+type RawServiceLine = {
+  serviceLineNumber: string;
+  nickname?: string | null;
+};
+
+type ServiceLinesPage = {
+  results?: RawServiceLine[];
+  isLastPage?: boolean;
+};
+
+// The human-readable name installers set in the Starlink portal usually lives
+// on the service line, not the physical terminal (whose nickname is almost
+// always null in practice).
+async function listServiceLineNicknames(
+  account: StarlinkAccount,
+): Promise<Record<string, string>> {
+  const nicknames: Record<string, string> = {};
+
+  let page = 0;
+  while (true) {
+    const response = (await apiGet(account, "/service-lines", {
+      page: String(page),
+    })) as ServiceResponse<ServiceLinesPage>;
+    const rawItems = response.content?.results ?? [];
+    const items = Array.isArray(rawItems) ? rawItems : [];
+    for (const line of items) {
+      if (line.nickname) nicknames[line.serviceLineNumber] = line.nickname;
+    }
+    const isLastPage = response.content?.isLastPage ?? true;
+    if (isLastPage || items.length === 0) break;
+    page += 1;
+  }
+
+  return nicknames;
+}
+
 async function listUserTerminals(
   account: StarlinkAccount,
 ): Promise<Array<{ userTerminalId: string; nickname: string | null; serviceLineNumber: string | null }>> {
@@ -209,18 +245,24 @@ async function queryTelemetry(
 async function listTerminalsForAccount(
   account: StarlinkAccount,
 ): Promise<TerminalTelemetry[]> {
-  const [terminals, telemetry] = await Promise.all([
+  const [terminals, telemetry, serviceLineNicknames] = await Promise.all([
     listUserTerminals(account),
     queryTelemetry(account),
+    listServiceLineNicknames(account),
   ]);
 
   return terminals.map((terminal) => {
     const reading = telemetry[terminal.userTerminalId];
+    const serviceLineNickname = terminal.serviceLineNumber
+      ? serviceLineNicknames[terminal.serviceLineNumber]
+      : undefined;
     return {
       terminalId: terminal.userTerminalId,
       accountLabel: account.label,
       serviceLineNumber: terminal.serviceLineNumber,
-      nickname: terminal.nickname,
+      // service line nickname (set per-site in the Starlink portal) takes
+      // priority — the terminal's own nickname is almost always empty.
+      nickname: serviceLineNickname ?? terminal.nickname,
       online: Boolean(reading),
       lastSeenAt: reading?.timestamp ?? null,
       signalQuality: reading?.signalQuality ?? null,

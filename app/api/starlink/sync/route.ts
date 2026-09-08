@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { antennas } from "@/db/schema";
 import { getStarlinkClient, hasStarlinkCredentials } from "@/lib/starlink";
@@ -20,6 +20,35 @@ async function isAuthorized(request: Request): Promise<boolean> {
   return authHeader === `Bearer ${cronSecret}`;
 }
 
+// Clears `location` wherever the exact same text repeats suspiciously often
+// across the whole table — leftover from an earlier bug that backfilled a
+// generic per-account billing address instead of a real per-site one. A
+// genuinely unique manual entry would never repeat like this, so this never
+// touches one. Cheap enough (a handful of rows at our scale) to just run on
+// every sync rather than needing a separate one-off action.
+const REPEAT_THRESHOLD = 5;
+
+async function clearRepeatedBadLocations(): Promise<number> {
+  const groups = await db
+    .select({ location: antennas.location, count: sql<number>`count(*)` })
+    .from(antennas)
+    .where(isNotNull(antennas.location))
+    .groupBy(antennas.location)
+    .having(sql`count(*) >= ${REPEAT_THRESHOLD}`);
+
+  let cleared = 0;
+  for (const group of groups) {
+    if (!group.location) continue;
+    const result = await db
+      .update(antennas)
+      .set({ location: null, updatedAt: new Date() })
+      .where(eq(antennas.location, group.location))
+      .returning({ id: antennas.id });
+    cleared += result.length;
+  }
+  return cleared;
+}
+
 export async function POST(request: Request) {
   if (!(await isAuthorized(request))) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -29,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       mode: "mock",
       updated: 0,
-      unmatched: [],
+      created: 0,
       errors: [],
       message: "No hay cuentas Starlink configuradas (STARLINK_ACCOUNTS) — nada que sincronizar.",
     });
@@ -39,7 +68,7 @@ export async function POST(request: Request) {
   const { terminals, errors } = await client.listTerminals();
 
   let updatedCount = 0;
-  const unmatched: { terminalId: string; nickname: string | null; accountLabel: string }[] = [];
+  let createdCount = 0;
 
   for (const terminal of terminals) {
     const [existing] = await db
@@ -47,24 +76,37 @@ export async function POST(request: Request) {
       .from(antennas)
       .where(eq(antennas.terminalId, terminal.terminalId));
 
+    const latitude = terminal.latitude !== null ? String(terminal.latitude) : null;
+    const longitude = terminal.longitude !== null ? String(terminal.longitude) : null;
+    const status = terminal.online ? "online" : "offline";
+    const lastSeenAt = terminal.lastSeenAt ? new Date(terminal.lastSeenAt) : null;
+    const signalQuality = terminal.signalQuality !== null ? String(terminal.signalQuality) : null;
+
     if (!existing) {
-      unmatched.push({
-        terminalId: terminal.terminalId,
-        nickname: terminal.nickname,
+      await db.insert(antennas).values({
+        siteName: terminal.nickname || terminal.terminalId,
         accountLabel: terminal.accountLabel,
+        terminalId: terminal.terminalId,
+        kitSerialNumber: terminal.kitSerialNumber,
+        latitude,
+        longitude,
+        status,
+        lastSeenAt,
+        signalQuality,
       });
+      createdCount++;
       continue;
     }
 
     const updates: Record<string, unknown> = {
-      status: terminal.online ? "online" : "offline",
-      lastSeenAt: terminal.lastSeenAt ? new Date(terminal.lastSeenAt) : null,
-      signalQuality: terminal.signalQuality !== null ? String(terminal.signalQuality) : null,
+      status,
+      lastSeenAt,
+      signalQuality,
       kitSerialNumber: terminal.kitSerialNumber,
       // GPS coordinates have no manual-entry path in the UI, so they're
       // always safe to keep in sync with Starlink's records.
-      latitude: terminal.latitude !== null ? String(terminal.latitude) : null,
-      longitude: terminal.longitude !== null ? String(terminal.longitude) : null,
+      latitude,
+      longitude,
       updatedAt: new Date(),
     };
 
@@ -83,10 +125,13 @@ export async function POST(request: Request) {
     updatedCount++;
   }
 
+  const locationsCleared = await clearRepeatedBadLocations();
+
   return NextResponse.json({
     mode: "live",
     updated: updatedCount,
-    unmatched,
+    created: createdCount,
+    locationsCleared,
     errors,
   });
 }

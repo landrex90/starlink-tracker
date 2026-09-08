@@ -32,8 +32,6 @@ export default function DashboardPage() {
   const [accountOptions, setAccountOptions] = useState<string[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [unmatchedCount, setUnmatchedCount] = useState(0);
-  const [importing, setImporting] = useState(false);
   const [sortBy, setSortBy] = useState("last_seen_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [stats, setStats] = useState({ total: 0, online: 0, offline: 0, monthlyCost: 0, onlinePct: 0 });
@@ -119,7 +117,6 @@ export default function DashboardPage() {
   async function handleSync() {
     setSyncing(true);
     setSyncMessage(null);
-    setUnmatchedCount(0);
     try {
       const res = await fetch("/api/starlink/sync", { method: "POST" });
       const data = await res.json();
@@ -128,38 +125,18 @@ export default function DashboardPage() {
       } else if (data.mode === "mock") {
         setSyncMessage(data.message);
       } else {
-        const parts = [`${data.updated} antena(s) actualizadas`];
-        if (data.unmatched?.length) {
-          parts.push(`${data.unmatched.length} terminal(es) sin vincular`);
-          setUnmatchedCount(data.unmatched.length);
-        }
+        const parts = [`${data.updated} actualizada(s)`, `${data.created} nueva(s)`];
+        if (data.locationsCleared) parts.push(`${data.locationsCleared} ubicación(es) corregida(s)`);
         if (data.errors?.length)
           parts.push(
             `errores: ${data.errors.map((e: { message: string }) => e.message).join("; ")}`,
           );
         setSyncMessage(parts.join(" — "));
-      }
-      await Promise.all([load(), loadStats()]);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  async function handleImportUnmatched() {
-    setImporting(true);
-    try {
-      const res = await fetch("/api/starlink/import-unmatched", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setSyncMessage(data.error ?? "Error al importar");
-      } else {
-        setSyncMessage(`${data.created} antena(s) nueva(s) agregadas`);
-        setUnmatchedCount(0);
         loadAccountOptions();
       }
       await Promise.all([load(), loadStats()]);
     } finally {
-      setImporting(false);
+      setSyncing(false);
     }
   }
 
@@ -218,20 +195,7 @@ export default function DashboardPage() {
       </div>
 
       {syncMessage && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">{syncMessage}</p>
-          {unmatchedCount > 0 && (
-            <button
-              onClick={handleImportUnmatched}
-              disabled={importing}
-              className="self-start rounded-md bg-blue-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
-            >
-              {importing
-                ? "Agregando..."
-                : `Agregar estas ${unmatchedCount} antena(s) nueva(s)`}
-            </button>
-          )}
-        </div>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">{syncMessage}</p>
       )}
 
       <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">

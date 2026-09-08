@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
   for (const terminal of terminals) {
     const [existing] = await db
-      .select({ id: antennas.id })
+      .select({ id: antennas.id, siteName: antennas.siteName })
       .from(antennas)
       .where(eq(antennas.terminalId, terminal.terminalId));
 
@@ -56,15 +56,25 @@ export async function POST(request: Request) {
       continue;
     }
 
-    await db
-      .update(antennas)
-      .set({
-        status: terminal.online ? "online" : "offline",
-        lastSeenAt: terminal.lastSeenAt ? new Date(terminal.lastSeenAt) : null,
-        signalQuality: terminal.signalQuality !== null ? String(terminal.signalQuality) : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(antennas.id, existing.id));
+    const updates: Record<string, unknown> = {
+      status: terminal.online ? "online" : "offline",
+      lastSeenAt: terminal.lastSeenAt ? new Date(terminal.lastSeenAt) : null,
+      signalQuality: terminal.signalQuality !== null ? String(terminal.signalQuality) : null,
+      updatedAt: new Date(),
+    };
+
+    // Fill in the real Starlink name only if site_name still looks
+    // auto-generated (equals the raw terminal_id) — never overwrite a name
+    // the user has since edited by hand.
+    if (
+      terminal.nickname &&
+      terminal.nickname !== terminal.terminalId &&
+      existing.siteName === terminal.terminalId
+    ) {
+      updates.siteName = terminal.nickname;
+    }
+
+    await db.update(antennas).set(updates).where(eq(antennas.id, existing.id));
     updatedCount++;
   }
 

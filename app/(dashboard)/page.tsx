@@ -33,7 +33,6 @@ export default function DashboardPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [importing, setImporting] = useState(false);
-  const [fixingNames, setFixingNames] = useState(false);
   const [sortBy, setSortBy] = useState("last_seen_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [stats, setStats] = useState({ total: 0, online: 0, offline: 0, monthlyCost: 0, onlinePct: 0 });
@@ -159,20 +158,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleFixNames() {
-    setFixingNames(true);
-    try {
-      const res = await fetch("/api/starlink/fix-names", { method: "POST" });
-      const data = await res.json();
-      setSyncMessage(
-        res.ok ? `${data.fixed} nombre(s) corregido(s)` : data.error ?? "Error al corregir nombres",
-      );
-      await load();
-    } finally {
-      setFixingNames(false);
-    }
-  }
-
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -218,14 +203,6 @@ export default function DashboardPage() {
           className="rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-4 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
         >
           {syncing ? "Sincronizando..." : "Sync now"}
-        </button>
-        <button
-          onClick={handleFixNames}
-          disabled={fixingNames}
-          title="Corrige el nombre de antenas que se crearon con el ID crudo de Starlink, usando el nombre real del service line. No toca nombres que ya editaste a mano."
-          className="rounded-md border border-neutral-300 dark:border-neutral-700 px-4 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
-        >
-          {fixingNames ? "Corrigiendo..." : "Corregir nombres"}
         </button>
       </div>
 

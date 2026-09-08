@@ -1,0 +1,27 @@
+databases:
+  - name: starlink-tracker-db
+    plan: free
+    databaseName: starlink_tracker
+    user: starlink_tracker
+
+services:
+  - name: starlink-tracker
+    type: web
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    preDeployCommand: npx drizzle-kit push
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: starlink-tracker-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: STARLINK_ACCOUNTS
+        sync: false
